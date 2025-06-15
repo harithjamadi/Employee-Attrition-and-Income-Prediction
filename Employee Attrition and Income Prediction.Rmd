@@ -1,0 +1,268 @@
+---
+title: "Dual-Model Approach to HR Analytics: Employee Attrition and Income Prediction"
+author: Harith/ Firdaus/ Hanisah
+output: html_document
+date: "2025-06-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Packages & Data
+```{r load-packages}
+# Install required packages if missing
+packages <- c("skimr", "DataExplorer", "corrplot", "ggplot2", "dplyr", "cluster", "factoextra", "caret", "randomForest", "gbm")
+installed <- packages %in% installed.packages()
+if (any(!installed)) install.packages(packages[!installed])
+
+# Load them
+library(skimr)
+library(DataExplorer)
+library(corrplot)
+library(ggplot2)
+library(dplyr)
+library(cluster)
+library(factoextra)
+library(caret)
+library(randomForest)
+library(gbm)
+
+# Load data
+attrition <- read.csv("https://raw.githubusercontent.com/harithjamadi/Employee-Attrition-and-Income-Prediction/main/HR.csv")
+head(attrition)
+```
+
+## Data Cleaning, Understanding & Exploration
+```{r data-wrangling}
+# Check structure and summary
+str(attrition)
+
+summary(attrition)
+
+skim(attrition)
+
+```
+
+```{r data-cleaning}
+# Missing values count
+colSums(is.na(attrition))
+
+# Visualize missing data
+plot_missing(attrition)
+
+# Check for duplicate rows
+sum(duplicated(attrition))
+```
+
+```{r data-encoding}
+# Convert categorical variables to factors
+attrition <- attrition %>%
+  mutate(
+    Attrition = as.factor(Attrition),
+    BusinessTravel = as.factor(BusinessTravel),
+    Department = as.factor(Department),
+    EducationField = as.factor(EducationField),
+    Gender = as.factor(Gender),
+    JobRole = as.factor(JobRole),
+    MaritalStatus = as.factor(MaritalStatus),
+    OverTime = as.factor(OverTime),
+    Over18 = as.factor(Over18)
+  )
+
+str(attrition)
+```
+
+## Summary Statistics Grouped by Attrition
+```{r summary-statistics}
+# Numeric summaries
+attrition %>%
+  group_by(Attrition) %>%
+  summarise(across(where(is.numeric), list(mean = mean, median = median), .names = "{.col}_{.fn}"))
+```
+
+## Attrition Distribution
+```{r attrition-distribution}
+# Bar chart of Attrition
+ggplot(attrition, aes(x = Attrition, fill = Attrition)) +
+  geom_bar() +
+  theme_minimal() +
+  labs(title = "Attrition Distribution", y = "Count")
+```
+## Correlation Analysis (Numerical)
+```{r correlation-analysis}
+# Select numeric columns
+numeric_vars <- attrition %>% select(where(is.numeric))
+
+# Correlation matrix
+cor_matrix <- cor(numeric_vars)
+
+# Visualize correlation
+corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.8)
+```
+
+## Univariate & Bivariate Analysis
+```{r variate-analysis}
+# Age Distribution
+ggplot(attrition, aes(x = Age)) +
+  geom_histogram(fill = "steelblue", bins = 30) +
+  theme_minimal() +
+  labs(title = "Distribution of Age")
+
+# Monthly Income by Attrition
+ggplot(attrition, aes(x = Attrition, y = MonthlyIncome, fill = Attrition)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Monthly Income by Attrition")
+
+# Attrition by Job Role
+ggplot(attrition, aes(x = JobRole, fill = Attrition)) +
+  geom_bar(position = "fill") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Attrition Rate by Job Role", y = "Proportion")
+
+# OverTime vs Attrition
+ggplot(attrition, aes(x = OverTime, fill = Attrition)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Attrition Rate by Overtime", y = "Proportion")
+
+ggplot(attrition, aes(x = Gender, fill = Attrition)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Attrition Rate by Gender", y = "Proportion")
+
+ggplot(attrition, aes(x = MaritalStatus, fill = Attrition)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Attrition Rate by Marital Status", y = "Proportion")
+
+ggplot(attrition, aes(x = Attrition, y = Age, fill = Attrition)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Age Distribution by Attrition")
+
+ggplot(attrition, aes(x = YearsAtCompany, fill = Attrition)) +
+  geom_histogram(position = "identity", alpha = 0.6, bins = 20) +
+  theme_minimal() +
+  labs(title = "Years at Company by Attrition")
+
+ggplot(attrition, aes(x = factor(JobSatisfaction), fill = Attrition)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Attrition by Job Satisfaction", x = "Job Satisfaction (1â€“4)", y = "Proportion")
+
+ggplot(attrition, aes(x = BusinessTravel, fill = Attrition)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Attrition Rate by Business Travel", y = "Proportion")
+
+ggplot(attrition, aes(x = TotalWorkingYears, y = MonthlyIncome, color = Attrition)) +
+  geom_point(alpha = 0.6) +
+  theme_minimal() +
+  labs(title = "Total Working Years vs. Monthly Income by Attrition")
+
+```
+
+## Regression Data Analysis
+```{r regression-analysis}
+set.seed(123)
+
+attrition <- subset(attrition, select = -c(EmployeeCount, EmployeeNumber, Over18, StandardHours))
+
+split <- createDataPartition(attrition$MonthlyIncome, p = 0.8, list = FALSE)
+train <- attrition[split, ]
+test <- attrition[-split, ]
+
+```
+
+```{r lm-modelling}
+model_lm <- train(MonthlyIncome ~ ., data = train, method = "lm")
+```
+
+```{r rf-modelling}
+model_rf <- train(MonthlyIncome ~ ., data = train, method = "rf", trControl = trainControl(method = "cv", number = 5))
+```
+
+```{r gbm-modelling}
+model_gbm <- train(MonthlyIncome ~ ., data = train, method = "gbm", verbose = FALSE, trControl = trainControl(method = "cv", number = 5))
+```
+
+```{r model-evaluation}
+pred_lm <- predict(model_lm, newdata = test)
+pred_rf <- predict(model_rf, newdata = test)
+pred_gbm <- predict(model_gbm, newdata = test)
+
+postResample(pred_lm, obs = test$MonthlyIncome)
+postResample(pred_rf, obs = test$MonthlyIncome)
+postResample(pred_gbm, obs = test$MonthlyIncome)
+```
+
+```{r model-prediction}
+ggplot(data.frame(Actual = test$MonthlyIncome, Predicted = pred_rf), aes(x = Actual, y = Predicted)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  geom_abline(color = "red", linetype = "dashed") +
+  theme_minimal() +
+  labs(title = "Predicted vs Actual Monthly Income", x = "Actual", y = "Predicted")
+```
+
+```{r model-prediction-2}
+plot(test$MonthlyIncome, pred_rf, col = "blue", main = "Predicted vs Actual (Random Forest)", xlab = "Actual Monthly Income", ylab = "Predicted Monthly Income")
+abline(0, 1, col = "red")
+```
+
+```{r feature-ranking}
+varImp(model_rf)
+```
+
+```{r pay-equity-analysis}
+test_results <- data.frame(Actual = test$MonthlyIncome, Predicted = pred_rf)
+test_results$Difference <- test_results$Predicted - test_results$Actual
+
+# Show top 10 underpaid employees
+head(arrange(test_results, Difference), 10)
+```
+
+## Clustering
+```{r clustering-analysis}
+# Determine optimal number of clusters (Elbow Method)
+
+set.seed(123)
+
+fviz_nbclust(df_scaled, kmeans, method = "wss") +
+  geom_vline(xintercept = 3, linetype = 2) +
+  labs(subtitle = "Elbow method")
+```
+
+```{r}
+# Run k-means clustering
+# assume we got 3 from elbow method
+
+set.seed(123)
+
+km_res <- kmeans(df_scaled, centers = 3, nstart = 25)
+
+# Add cluster assignment to original data
+df_clustered <- df %>%
+  mutate(Cluster = as.factor(km_res$cluster))
+```
+
+```{r}
+# Visualize Clusters (PCA for Dimensionality Reduction)
+
+fviz_cluster(km_res, data = df_scaled,
+             ellipse.type = "euclid",
+             palette = "jco",
+             ggtheme = theme_minimal())
+
+```
+
+```{r}
+# Profile Clusters
+# see what each clusters look like in terms of average values
+
+df_clustered %>%
+  group_by(Cluster) %>%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE))
+```
