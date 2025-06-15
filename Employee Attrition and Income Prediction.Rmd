@@ -172,9 +172,22 @@ set.seed(123)
 
 attrition <- subset(attrition, select = -c(EmployeeCount, EmployeeNumber, Over18, StandardHours))
 
-split <- createDataPartition(attrition$MonthlyIncome, p = 0.8, list = FALSE)
-train <- attrition[split, ]
-test <- attrition[-split, ]
+# data scaling for numerical features
+hr_scaled <- attrition
+numeric_cols <- sapply(attrition, is.numeric)
+hr_scaled[numeric_cols] <- scale(attrition[numeric_cols])
+
+dummies <- dummyVars(~ ., data = attrition)
+hr_dummy <- predict(dummies, newdata = attrition)
+
+hr_scaled <- scale(hr_dummy)
+
+hr_scaled <- as.data.frame(hr_scaled)
+
+
+split <- createDataPartition(hr_scaled$MonthlyIncome, p = 0.8, list = FALSE)
+train <- hr_scaled[split, ]
+test <- hr_scaled[-split, ]
 
 ```
 
@@ -233,11 +246,11 @@ set.seed(123)  # for reproducibility
 kmeans_result <- kmeans(hr_scaled, centers = 3, nstart = 25)
 
 # Add cluster labels to the original data
-hr_cluster$Cluster <- as.factor(kmeans_result$cluster)
+hr_scaled$Cluster <- as.factor(kmeans_result$cluster)
 
 # Summary of clusters
-table(hr_cluster$Cluster)
-aggregate(hr_encoded, by = list(Cluster = kmeans_result$cluster), FUN = mean)
+table(hr_scaled$Cluster)
+aggregate(hr_scaled, by = list(Cluster = kmeans_result$cluster), FUN = mean)
 
 wss <- numeric(10)
 
