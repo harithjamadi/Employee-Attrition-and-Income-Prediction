@@ -239,27 +239,48 @@ head(arrange(test_results, Difference), 10)
 ```
 
 ## Clustering
-```{r clustering-analysis}
-set.seed(123)  # for reproducibility
 
-# Choose number of clusters (e.g., 3 here)
-kmeans_result <- kmeans(hr_scaled, centers = 3, nstart = 25)
+```{r K-Means Clustering}
+# Copy the scaled data to avoid issues
+hr_input <- hr_scaled[, !names(hr_scaled) %in% "Cluster"]
+
+# Run k-means on clean numeric data
+set.seed(123)
+kmeans_result <- kmeans(hr_input, centers = 3, nstart = 25)
 
 # Add cluster labels to the original data
 hr_scaled$Cluster <- as.factor(kmeans_result$cluster)
 
-# Summary of clusters
-table(hr_scaled$Cluster)
-aggregate(hr_scaled, by = list(Cluster = kmeans_result$cluster), FUN = mean)
+# Now you can visualize without error
+fviz_cluster(kmeans_result, data = hr_input, geom = "point", ellipse.type = "convex",
+             palette = "jco", ggtheme = theme_minimal())
+```
 
-wss <- numeric(10)
 
-for (k in 1:10) {
-  kmeans_k <- kmeans(hr_scaled, centers = k, nstart = 10)
-  wss[k] <- kmeans_k$tot.withinss
-}
+```{r Hierarchical Clustering}
+# Compute distance and linkage
+dist_matrix <- dist(hr_input)
+hc_result <- hclust(dist_matrix, method = "ward.D2")
 
-plot(1:10, wss, type = "b", pch = 19, frame = FALSE,
-     xlab = "Number of clusters K",
-     ylab = "Total within-clusters sum of squares",
-     main = "Elbow Method for Optimal K")
+# Dendrogram
+plot(hc_result, labels = FALSE, hang = -1, main = "Hierarchical Clustering Dendrogram")
+
+# Cut into 3 clusters
+hr_hclust <- hr_scaled
+hr_hclust$Cluster <- as.factor(cutree(hc_result, k = 3))
+
+# Visualize
+fviz_cluster(list(data = hr_input, cluster = hr_hclust$Cluster),
+             geom = "point", ellipse.type = "convex", palette = "jco", ggtheme = theme_minimal())
+
+```
+```{r PAM (Partitioning Around Medoids)}
+
+pam_result <- pam(hr_scaled, k = 3)
+hr_pam <- hr_scaled
+hr_pam$Cluster <- as.factor(pam_result$clustering)
+
+fviz_cluster(pam_result, geom = "point", ellipse.type = "convex",
+             palette = "jco", ggtheme = theme_minimal())
+
+```
