@@ -227,43 +227,26 @@ head(arrange(test_results, Difference), 10)
 
 ## Clustering
 ```{r clustering-analysis}
-# Determine optimal number of clusters (Elbow Method)
+set.seed(123)  # for reproducibility
 
-set.seed(123)
+# Choose number of clusters (e.g., 3 here)
+kmeans_result <- kmeans(hr_scaled, centers = 3, nstart = 25)
 
-fviz_nbclust(df_scaled, kmeans, method = "wss") +
-  geom_vline(xintercept = 3, linetype = 2) +
-  labs(subtitle = "Elbow method")
-```
+# Add cluster labels to the original data
+hr_cluster$Cluster <- as.factor(kmeans_result$cluster)
 
-```{r}
-# Run k-means clustering
-# assume we got 3 from elbow method
+# Summary of clusters
+table(hr_cluster$Cluster)
+aggregate(hr_encoded, by = list(Cluster = kmeans_result$cluster), FUN = mean)
 
-set.seed(123)
+wss <- numeric(10)
 
-km_res <- kmeans(df_scaled, centers = 3, nstart = 25)
+for (k in 1:10) {
+  kmeans_k <- kmeans(hr_scaled, centers = k, nstart = 10)
+  wss[k] <- kmeans_k$tot.withinss
+}
 
-# Add cluster assignment to original data
-df_clustered <- df %>%
-  mutate(Cluster = as.factor(km_res$cluster))
-```
-
-```{r}
-# Visualize Clusters (PCA for Dimensionality Reduction)
-
-fviz_cluster(km_res, data = df_scaled,
-             ellipse.type = "euclid",
-             palette = "jco",
-             ggtheme = theme_minimal())
-
-```
-
-```{r}
-# Profile Clusters
-# see what each clusters look like in terms of average values
-
-df_clustered %>%
-  group_by(Cluster) %>%
-  summarise(across(where(is.numeric), mean, na.rm = TRUE))
-```
+plot(1:10, wss, type = "b", pch = 19, frame = FALSE,
+     xlab = "Number of clusters K",
+     ylab = "Total within-clusters sum of squares",
+     main = "Elbow Method for Optimal K")
