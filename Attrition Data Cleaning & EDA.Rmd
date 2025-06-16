@@ -1,0 +1,313 @@
+---
+title: "Dual-Model Approach to HR Analytics: Employee Attrition and Income Prediction"
+author: Harith/ Firdaus/ Hanisah
+output: html_document
+date: "2025-06-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+```
+
+## Load Packages & Data
+```{r load-packages}
+# Install required packages if missing
+packages <- c("skimr", "DataExplorer", "corrplot", "ggplot2", "dplyr", "cluster", "factoextra", "caret", "randomForest", "gbm")
+installed <- packages %in% installed.packages()
+if (any(!installed)) install.packages(packages[!installed])
+
+# Load them
+library(skimr)
+library(DataExplorer)
+library(corrplot)
+library(ggplot2)
+library(dplyr)
+library(cluster)
+library(factoextra)
+library(caret)
+library(randomForest)
+library(gbm)
+
+# Load data
+attrition <- read.csv("https://raw.githubusercontent.com/harithjamadi/Employee-Attrition-and-Income-Prediction/main/HR.csv")
+head(attrition)
+```
+
+## Data Cleaning, Understanding & Exploration
+```{r data-wrangling}
+# Check structure and summary
+# → Understand data types, detect categorical/numeric variables, and get an overview of distributions.
+str(attrition)
+
+summary(attrition)
+
+skim(attrition)
+
+```
+
+```{r data-cleaning}
+# Check for missing values and duplicates
+# → Ensure data completeness and integrity before analysis.
+colSums(is.na(attrition))
+
+# Visualize missing data
+plot_missing(attrition)
+
+# Check for duplicate rows
+sum(duplicated(attrition))
+```
+
+```{r data-encoding}
+# Convert categorical variables to factors
+# → Required for correct handling in models and visualizations.
+attrition <- attrition %>%
+  mutate(
+    Attrition = as.factor(Attrition),
+    BusinessTravel = as.factor(BusinessTravel),
+    Department = as.factor(Department),
+    EducationField = as.factor(EducationField),
+    Gender = as.factor(Gender),
+    JobRole = as.factor(JobRole),
+    MaritalStatus = as.factor(MaritalStatus),
+    OverTime = as.factor(OverTime),
+    Over18 = as.factor(Over18)
+  )
+
+str(attrition) # Re-check structure after conversion
+```
+
+## Summary Statistics Grouped by Attrition
+```{r summary-statistics}
+# Generate summary statistics grouped by Attrition
+# → Compare means and medians of numeric features between employees who left and stayed.
+attrition %>%
+  group_by(Attrition) %>%
+  summarise(across(where(is.numeric), list(mean = mean, median = median), .names = "{.col}_{.fn}"))
+```
+
+## Attrition Distribution
+```{r attrition-distribution}
+# Visualize overall attrition distribution
+# → Understand class imbalance in the target variable.
+ggplot(attrition, aes(x = Attrition, fill = Attrition)) +
+  geom_bar() +
+  theme_minimal() +
+  labs(title = "Attrition Distribution", y = "Count")
+```
+## Correlation Analysis (Numerical)
+```{r correlation-analysis}
+# Analyze correlations among numeric variables
+# → Identify multicollinearity and spot influential numeric predictors.
+numeric_vars <- attrition %>% select(where(is.numeric))
+
+# Correlation matrix
+cor_matrix <- cor(numeric_vars)
+
+# Visualize correlation
+corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.8)
+```
+
+## Univariate & Bivariate Analysis
+```{r variate-analysis}
+# Visualize distributions and relationships between features and Attrition
+# → Explore potential predictors and patterns.
+
+# Age distribution (Histogram)
+# → Understand overall age trends. Histogram is used to show frequency distribution of continuous variable (Age).
+ggplot(attrition, aes(x = Age)) +
+  geom_histogram(fill = "steelblue", bins = 30) +
+  theme_minimal() +
+  labs(title = "Distribution of Age")
+
+# Monthly income by Attrition (Boxplot)
+# → Compare income distribution between employees who stayed vs left. Boxplot shows medians and outliers clearly.
+ggplot(attrition, aes(x = Attrition, y = MonthlyIncome, fill = Attrition)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Monthly Income by Attrition")
+
+# Job Role vs Attrition (Proportional Bar Chart)
+# → Identify which job roles have higher attrition. Proportional bar chart (position = "fill") is ideal for comparing proportions within categories.
+ggplot(attrition, aes(x = JobRole, fill = Attrition)) +
+  geom_bar(position = "fill") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Attrition Rate by Job Role", y = "Proportion")
+
+# Overtime vs Attrition (Proportional Bar Chart)
+# → Analyze how working overtime affects attrition. Proportional bar chart is used to compare ratios across groups.
+ggplot(attrition, aes(x = OverTime, fill = Attrition)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Attrition Rate by Overtime", y = "Proportion")
+
+# Gender vs Attrition (Proportional Bar Chart)
+# → See if attrition varies by gender. Bar chart with proportion helps normalize different group sizes.
+ggplot(attrition, aes(x = Gender, fill = Attrition)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Attrition Rate by Gender", y = "Proportion")
+
+# Marital Status vs Attrition (Proportional Bar Chart)
+# → Assess marital status influence on attrition. Again, proportion bar chart allows fair comparison across groups.
+ggplot(attrition, aes(x = MaritalStatus, fill = Attrition)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Attrition Rate by Marital Status", y = "Proportion")
+
+# Age by Attrition (Boxplot)
+# → Compare age ranges across attrition groups. Boxplot efficiently shows medians, spread, and outliers.
+ggplot(attrition, aes(x = Attrition, y = Age, fill = Attrition)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Age Distribution by Attrition")
+
+# Years at Company by Attrition (Histogram with overlay)
+# → Examine tenure patterns among employees. Histogram shows frequency, with transparency (alpha) to allow group comparison.
+ggplot(attrition, aes(x = YearsAtCompany, fill = Attrition)) +
+  geom_histogram(position = "identity", alpha = 0.6, bins = 20) +
+  theme_minimal() +
+  labs(title = "Years at Company by Attrition")
+
+# Job Satisfaction vs Attrition (Stacked Bar Chart)
+# → Explore satisfaction levels related to attrition. Categorical x-axis, so bar chart is suitable. Proportions show attrition rate by rating.
+ggplot(attrition, aes(x = factor(JobSatisfaction), fill = Attrition)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Attrition by Job Satisfaction", x = "Job Satisfaction (1â€“4)", y = "Proportion")
+
+# Business Travel vs Attrition (Proportional Bar Chart)
+# → Determine if frequent travel affects attrition. Bar chart visualizes proportion of leavers in each travel group.
+ggplot(attrition, aes(x = BusinessTravel, fill = Attrition)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Attrition Rate by Business Travel", y = "Proportion")
+
+# Total Working Years vs Monthly Income by Attrition (Scatter Plot)
+# → Investigate relationship between experience and income, and how it differs for attrition status. Scatter plot best for continuous vs continuous.
+ggplot(attrition, aes(x = TotalWorkingYears, y = MonthlyIncome, color = Attrition)) +
+  geom_point(alpha = 0.6) +
+  theme_minimal() +
+  labs(title = "Total Working Years vs. Monthly Income by Attrition")
+
+```
+
+## Regression Data Analysis
+```{r regression-analysis}
+set.seed(123)
+
+attrition <- subset(attrition, select = -c(EmployeeCount, EmployeeNumber, Over18, StandardHours))
+
+# data scaling for numerical features
+hr_scaled <- attrition
+numeric_cols <- sapply(attrition, is.numeric)
+hr_scaled[numeric_cols] <- scale(attrition[numeric_cols])
+
+dummies <- dummyVars(~ ., data = attrition)
+hr_dummy <- predict(dummies, newdata = attrition)
+
+hr_scaled <- scale(hr_dummy)
+
+hr_scaled <- as.data.frame(hr_scaled)
+
+
+split <- createDataPartition(hr_scaled$MonthlyIncome, p = 0.8, list = FALSE)
+train <- hr_scaled[split, ]
+test <- hr_scaled[-split, ]
+
+```
+
+```{r lm-modelling}
+model_lm <- train(MonthlyIncome ~ ., data = train, method = "lm")
+```
+
+```{r rf-modelling}
+model_rf <- train(MonthlyIncome ~ ., data = train, method = "rf", trControl = trainControl(method = "cv", number = 5))
+```
+
+```{r gbm-modelling}
+model_gbm <- train(MonthlyIncome ~ ., data = train, method = "gbm", verbose = FALSE, trControl = trainControl(method = "cv", number = 5))
+```
+
+```{r model-evaluation}
+pred_lm <- predict(model_lm, newdata = test)
+pred_rf <- predict(model_rf, newdata = test)
+pred_gbm <- predict(model_gbm, newdata = test)
+
+postResample(pred_lm, obs = test$MonthlyIncome)
+postResample(pred_rf, obs = test$MonthlyIncome)
+postResample(pred_gbm, obs = test$MonthlyIncome)
+```
+
+```{r model-prediction}
+ggplot(data.frame(Actual = test$MonthlyIncome, Predicted = pred_rf), aes(x = Actual, y = Predicted)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  geom_abline(color = "red", linetype = "dashed") +
+  theme_minimal() +
+  labs(title = "Predicted vs Actual Monthly Income", x = "Actual", y = "Predicted")
+```
+
+```{r model-prediction-2}
+plot(test$MonthlyIncome, pred_rf, col = "blue", main = "Predicted vs Actual (Random Forest)", xlab = "Actual Monthly Income", ylab = "Predicted Monthly Income")
+abline(0, 1, col = "red")
+```
+
+```{r feature-ranking}
+varImp(model_rf)
+```
+
+```{r pay-equity-analysis}
+test_results <- data.frame(Actual = test$MonthlyIncome, Predicted = pred_rf)
+test_results$Difference <- test_results$Predicted - test_results$Actual
+
+# Show top 10 underpaid employees
+head(arrange(test_results, Difference), 10)
+```
+
+## Clustering
+
+```{r K-Means Clustering}
+# Copy the scaled data to avoid issues
+hr_input <- hr_scaled[, !names(hr_scaled) %in% "Cluster"]
+
+# Run k-means on clean numeric data
+set.seed(123)
+kmeans_result <- kmeans(hr_input, centers = 3, nstart = 25)
+
+# Add cluster labels to the original data
+hr_scaled$Cluster <- as.factor(kmeans_result$cluster)
+
+# Now you can visualize without error
+fviz_cluster(kmeans_result, data = hr_input, geom = "point", ellipse.type = "convex",
+             palette = "jco", ggtheme = theme_minimal())
+```
+
+
+```{r Hierarchical Clustering}
+# Compute distance and linkage
+dist_matrix <- dist(hr_input)
+hc_result <- hclust(dist_matrix, method = "ward.D2")
+
+# Dendrogram
+plot(hc_result, labels = FALSE, hang = -1, main = "Hierarchical Clustering Dendrogram")
+
+# Cut into 3 clusters
+hr_hclust <- hr_scaled
+hr_hclust$Cluster <- as.factor(cutree(hc_result, k = 3))
+
+# Visualize
+fviz_cluster(list(data = hr_input, cluster = hr_hclust$Cluster),
+             geom = "point", ellipse.type = "convex", palette = "jco", ggtheme = theme_minimal())
+
+```
+```{r PAM (Partitioning Around Medoids)}
+
+pam_result <- pam(hr_scaled, k = 3)
+hr_pam <- hr_scaled
+hr_pam$Cluster <- as.factor(pam_result$clustering)
+
+fviz_cluster(pam_result, geom = "point", ellipse.type = "convex",
+             palette = "jco", ggtheme = theme_minimal())
+
+```
