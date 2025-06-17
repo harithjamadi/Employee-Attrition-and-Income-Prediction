@@ -284,3 +284,38 @@ fviz_cluster(pam_result, geom = "point", ellipse.type = "convex",
              palette = "jco", ggtheme = theme_minimal())
 
 ```
+```{r Cluster Comparison}
+
+# Silhouette Widths
+library(cluster)
+cat("KMeans Avg Silhouette: ", mean(silhouette(kmeans_result$cluster, dist(hr_input))[, 3]), "\n")
+cat("Hierarchical Avg Silhouette: ", mean(silhouette(hr_hclust$Cluster, dist(hr_input))[, 3]), "\n")
+cat("PAM Avg Silhouette: ", mean(pam_result$silinfo$avg.width), "\n")
+
+# Total within sum of squares (K-Means only)
+cat("KMeans Total Within-Cluster SS: ", kmeans_result$tot.withinss, "\n")
+```
+```{r Cluster Profiling}
+
+# KMeans cluster characteristics
+kmeans_summary <- aggregate(hr_scaled[, -which(names(hr_scaled) == "Cluster")],
+                            by = list(Cluster = hr_scaled$Cluster), FUN = mean)
+
+# Hierarchical
+hclust_summary <- aggregate(hr_hclust[, -which(names(hr_hclust) == "Cluster")],
+                            by = list(Cluster = hr_hclust$Cluster), FUN = mean)
+
+# PAM
+pam_summary <- aggregate(hr_pam[, -which(names(hr_pam) == "Cluster")],
+                         by = list(Cluster = hr_pam$Cluster), FUN = mean)
+```
+```{r Cluster Profiling Visualisation}
+
+# Melt the summary for ggplot (example with kmeans)
+melted_summary <- melt(kmeans_summary, id.vars = "Cluster")
+
+ggplot(melted_summary, aes(x = variable, y = value, fill = Cluster)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Cluster Profiles", x = "Feature", y = "Mean (scaled)")
+```
