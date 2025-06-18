@@ -9,15 +9,25 @@ date: "2025-06-15"
 knitr::opts_chunk$set(echo = TRUE)
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 ```
+## Introduction
 
-## Load Packages & Data
+An HR Management Development Program is often structured to provide a thorough blend of theoretical knowledge and practical experience, ensuring that participants gain well-rounded competencies. The program is frequently separated into main modules that address essential HR responsibilities like as recruitment, talent management, employee engagement, and labor law compliance
+
+## Objectives
+
+1. To explore patterns in employee behavior.
+2. To predict whether an employee is likely to leave the company (attrition) and to estimate their monthly income.
+3. To evaluate and compare between machine learning models for the best-performing model.
+
+## Data preparation
+
 ```{r load-packages}
 # Install required packages if missing
 packages <- c("skimr", "DataExplorer", "corrplot", "ggplot2", "dplyr", "cluster", "factoextra", "caret", "randomForest", "gbm")
 installed <- packages %in% installed.packages()
 if (any(!installed)) install.packages(packages[!installed])
 
-# Load them
+# Load packages
 library(skimr)
 library(DataExplorer)
 library(corrplot)
@@ -29,12 +39,15 @@ library(caret)
 library(randomForest)
 library(gbm)
 
+set.seed(123)
+
 # Load data
 attrition <- read.csv("https://raw.githubusercontent.com/harithjamadi/Employee-Attrition-and-Income-Prediction/main/HR.csv")
 head(attrition)
 ```
 
 ## Data Cleaning, Understanding & Exploration
+
 ```{r data-wrangling}
 # Check structure and summary
 # → Understand data types, detect categorical/numeric variables, and get an overview of distributions.
@@ -116,7 +129,7 @@ corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.8)
 # Age distribution (Histogram)
 # → Understand overall age trends. Histogram is used to show frequency distribution of continuous variable (Age).
 ggplot(attrition, aes(x = Age)) +
-  geom_histogram(fill = "steelblue", bins = 30) +
+  geom_histogram(fill = "ssteelblue", bins = 30) +
   theme_minimal() +
   labs(title = "Distribution of Age")
 
@@ -130,7 +143,7 @@ ggplot(attrition, aes(x = Attrition, y = MonthlyIncome, fill = Attrition)) +
 # Job Role vs Attrition (Proportional Bar Chart)
 # → Identify which job roles have higher attrition. Proportional bar chart (position = "fill") is ideal for comparing proportions within categories.
 ggplot(attrition, aes(x = JobRole, fill = Attrition)) +
-  geom_bar(position = "fill") +
+  geom_bar(position = "fill") +ss
   coord_flip() +
   theme_minimal() +
   labs(title = "Attrition Rate by Job Role", y = "Proportion")
@@ -195,41 +208,43 @@ ggplot(attrition, aes(x = TotalWorkingYears, y = MonthlyIncome, color = Attritio
 
 ## Regression Data Analysis
 ```{r regression-analysis}
-set.seed(123)
-
+# Remove non-information columns
 attrition <- subset(attrition, select = -c(EmployeeCount, EmployeeNumber, Over18, StandardHours))
 
-# data scaling for numerical features
-hr_scaled <- attrition
+# Scaling numerical features
 numeric_cols <- sapply(attrition, is.numeric)
+hr_scaled <- attrition
 hr_scaled[numeric_cols] <- scale(attrition[numeric_cols])
 
+# Encode categorical features
 dummies <- dummyVars(~ ., data = attrition)
 hr_dummy <- predict(dummies, newdata = attrition)
+hr_scaled <- as.data.frame(scale(hr_dummy))
 
-hr_scaled <- scale(hr_dummy)
-
-hr_scaled <- as.data.frame(hr_scaled)
-
-
+# Train-test split
 split <- createDataPartition(hr_scaled$MonthlyIncome, p = 0.8, list = FALSE)
 train <- hr_scaled[split, ]
 test <- hr_scaled[-split, ]
 
 ```
 
-```{r lm-modelling}
+## Predictive Modeling - Regression Analysis
+### Linear Regression Model
+```{r lm-model}
 model_lm <- train(MonthlyIncome ~ ., data = train, method = "lm")
 ```
 
-```{r rf-modelling}
+### Random Forest Model
+```{r rf-model}
 model_rf <- train(MonthlyIncome ~ ., data = train, method = "rf", trControl = trainControl(method = "cv", number = 5))
 ```
 
-```{r gbm-modelling}
+### Gradient Boosting Model
+```{r gbm-model}
 model_gbm <- train(MonthlyIncome ~ ., data = train, method = "gbm", verbose = FALSE, trControl = trainControl(method = "cv", number = 5))
 ```
 
+### Model Evaluation
 ```{r model-evaluation}
 pred_lm <- predict(model_lm, newdata = test)
 pred_rf <- predict(model_rf, newdata = test)
@@ -240,6 +255,7 @@ postResample(pred_rf, obs = test$MonthlyIncome)
 postResample(pred_gbm, obs = test$MonthlyIncome)
 ```
 
+### Prediction Visualization
 ```{r model-prediction}
 ggplot(data.frame(Actual = test$MonthlyIncome, Predicted = pred_rf), aes(x = Actual, y = Predicted)) +
   geom_point(alpha = 0.6, color = "steelblue") +
@@ -248,15 +264,12 @@ ggplot(data.frame(Actual = test$MonthlyIncome, Predicted = pred_rf), aes(x = Act
   labs(title = "Predicted vs Actual Monthly Income", x = "Actual", y = "Predicted")
 ```
 
-```{r model-prediction-2}
-plot(test$MonthlyIncome, pred_rf, col = "blue", main = "Predicted vs Actual (Random Forest)", xlab = "Actual Monthly Income", ylab = "Predicted Monthly Income")
-abline(0, 1, col = "red")
-```
-
+### Feature Importance
 ```{r feature-ranking}
 varImp(model_rf)
 ```
 
+### Pay Equity Analysis
 ```{r pay-equity-analysis}
 test_results <- data.frame(Actual = test$MonthlyIncome, Predicted = pred_rf)
 test_results$Difference <- test_results$Predicted - test_results$Actual
@@ -265,14 +278,13 @@ test_results$Difference <- test_results$Predicted - test_results$Actual
 head(arrange(test_results, Difference), 10)
 ```
 
-## Clustering
-
+## Clustering Analysis
+### K-Means Clustering
 ```{r K-Means Clustering}
 # Copy the scaled data to avoid issues
 hr_input <- hr_scaled[, !names(hr_scaled) %in% "Cluster"]
 
 # Run k-means on clean numeric data
-set.seed(123)
 kmeans_result <- kmeans(hr_input, centers = 3, nstart = 25)
 
 # Add cluster labels to the original data
@@ -283,7 +295,7 @@ fviz_cluster(kmeans_result, data = hr_input, geom = "point", ellipse.type = "con
              palette = "jco", ggtheme = theme_minimal())
 ```
 
-
+### Huerarchical Clustering
 ```{r Hierarchical Clustering}
 # Compute distance and linkage
 dist_matrix <- dist(hr_input)
@@ -301,6 +313,8 @@ fviz_cluster(list(data = hr_input, cluster = hr_hclust$Cluster),
              geom = "point", ellipse.type = "convex", palette = "jco", ggtheme = theme_minimal())
 
 ```
+
+### Partitioning Around Medoids (PAM) Clustering
 ```{r PAM (Partitioning Around Medoids)}
 
 pam_result <- pam(hr_scaled, k = 3)
