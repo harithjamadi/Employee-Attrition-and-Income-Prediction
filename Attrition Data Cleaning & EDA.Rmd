@@ -38,6 +38,7 @@ library(factoextra)
 library(caret)
 library(randomForest)
 library(gbm)
+library(reshape2)
 
 set.seed(123)
 
@@ -129,7 +130,7 @@ corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.8)
 # Age distribution (Histogram)
 # → Understand overall age trends. Histogram is used to show frequency distribution of continuous variable (Age).
 ggplot(attrition, aes(x = Age)) +
-  geom_histogram(fill = "ssteelblue", bins = 30) +
+  geom_histogram(fill = "steelblue", bins = 30) +
   theme_minimal() +
   labs(title = "Distribution of Age")
 
@@ -143,7 +144,7 @@ ggplot(attrition, aes(x = Attrition, y = MonthlyIncome, fill = Attrition)) +
 # Job Role vs Attrition (Proportional Bar Chart)
 # → Identify which job roles have higher attrition. Proportional bar chart (position = "fill") is ideal for comparing proportions within categories.
 ggplot(attrition, aes(x = JobRole, fill = Attrition)) +
-  geom_bar(position = "fill") +ss
+  geom_bar(position = "fill") +
   coord_flip() +
   theme_minimal() +
   labs(title = "Attrition Rate by Job Role", y = "Proportion")
@@ -279,7 +280,16 @@ head(arrange(test_results, Difference), 10)
 ```
 
 ## Clustering Analysis
+
+This clustering analysis aims to uncover distinct patterns and groupings within the HR dataset. Since the dataset contains multiple continuous variables without predefined labels, clustering provides an effective way to segment observations into meaningful groups based on their similarities.
+To ensure robust and reliable findings, three different clustering algorithms are applied and compared:
+
+- K-Means Clustering – a widely used, centroid-based method that partitions data into clusters with minimal within-cluster variance.
+- Hierarchical Clustering (Ward’s Method) – a tree-based approach that does not require pre-specifying the number of clusters and helps visualize nested structures in the data.
+- Partitioning Around Medoids (PAM) – a medoid-based alternative to K-Means that is more resilient to outliers and non-spherical clusters.
+
 ### K-Means Clustering
+K-Means is a fast and widely used clustering method that partitions data into k clusters by minimizing within-cluster variance. In this analysis, we removed any pre-existing cluster labels to avoid contamination, applied K-Means with 3 clusters and 25 random starts for stability, and added the resulting labels back to the dataset for profiling. The clusters were then visualized using the first two principal components to aid interpretation.
 ```{r K-Means Clustering}
 # Copy the scaled data to avoid issues
 hr_input <- hr_scaled[, !names(hr_scaled) %in% "Cluster"]
@@ -290,12 +300,13 @@ kmeans_result <- kmeans(hr_input, centers = 3, nstart = 25)
 # Add cluster labels to the original data
 hr_scaled$Cluster <- as.factor(kmeans_result$cluster)
 
-# Now you can visualize without error
+# Visualize
 fviz_cluster(kmeans_result, data = hr_input, geom = "point", ellipse.type = "convex",
              palette = "jco", ggtheme = theme_minimal())
 ```
 
-### Huerarchical Clustering
+### Hierarchical Clustering
+Hierarchical clustering builds a tree-like structure of nested clusters using Ward’s linkage method, which minimizes within-cluster variance. After computing the distance matrix, a dendrogram is plotted to visualize the grouping structure. The tree is then cut to form 3 clusters, which are assigned to the data and visualized for interpretation.
 ```{r Hierarchical Clustering}
 # Compute distance and linkage
 dist_matrix <- dist(hr_input)
@@ -315,6 +326,7 @@ fviz_cluster(list(data = hr_input, cluster = hr_hclust$Cluster),
 ```
 
 ### Partitioning Around Medoids (PAM) Clustering
+PAM (Partitioning Around Medoids) is a robust clustering method that, unlike K-Means, uses medoids, making it less sensitive to outliers and better suited for datasets with noise or non-spherical shapes. In this analysis, PAM was applied with 3 clusters, and the resulting labels were added to the dataset and visualized for interpretation.
 ```{r PAM (Partitioning Around Medoids)}
 
 pam_result <- pam(hr_scaled, k = 3)
@@ -325,3 +337,81 @@ fviz_cluster(pam_result, geom = "point", ellipse.type = "convex",
              palette = "jco", ggtheme = theme_minimal())
 
 ```
+
+### Cluster Profiling
+Based on visual comparison, we selected K-Means Clusters as the most interpretable clustering solution due to its clear separation and minimal overlap between clusters. 
+Cluster profiling was then performed by computing feature means within each cluster and identifying the top 30 features with the highest variance across groups. 
+These key differentiators were visualized using bar plots to clearly highlight distinctions between clusters.
+
+```{r Cluster Profiling & visualisation}
+# KMeans
+kmeans_summary <- aggregate(hr_scaled[, -which(names(hr_scaled) == "Cluster")],
+                            by = list(Cluster = hr_scaled$Cluster), FUN = mean)
+
+# Compute variance of mean feature values across clusters
+feature_variances <- apply(kmeans_summary[,-1], 2, var)
+
+# Select top 30 (10/10/10) features
+features1 <- names(sort(feature_variances, decreasing = TRUE))[1:10]
+features2 <- names(sort(feature_variances, decreasing = TRUE))[11:20]
+features3 <- names(sort(feature_variances, decreasing = TRUE))[21:30]
+
+melted_summary <- melt(kmeans_summary, id.vars = "Cluster")
+
+
+melted1 <- melted_summary[melted_summary$variable %in% features1, ]
+
+ggplot(melted1, aes(x = variable, y = value, fill = Cluster)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "First 10 Discriminative Features by Cluster",
+       x = "Feature", y = "Mean (scaled)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+melted2 <- melted_summary[melted_summary$variable %in% features2, ]
+
+ggplot(melted2, aes(x = variable, y = value, fill = Cluster)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Second 10 Discriminative Features by Cluster",
+       x = "Feature", y = "Mean (scaled)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+melted3 <- melted_summary[melted_summary$variable %in% features3, ]
+
+ggplot(melted3, aes(x = variable, y = value, fill = Cluster)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Third 10 Discriminative Features by Cluster",
+       x = "Feature", y = "Mean (scaled)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+### Key Findings
+
+**Cluster 1 (Red)**
+Likely early-career employees in Sales or Research roles with lower tenure and income, potentially at risk of attrition.
+
+- Department: Mostly in Sales.
+- Roles: Sales Rep, Research Scientist.
+- Experience: Low job level, income, and tenure.
+- Attrition: Higher risk of leaving.
+
+**Cluster 2 (Green)**
+Likely mid-level sales/marketing professionals with moderate experience and lower attrition rates.
+
+- Department: Strong in Sales and Marketing.
+- Roles: Sales Exec, Healthcare Rep.
+- Experience: Moderate income and tenure.
+- Attrition: Lower risk of leaving.
+
+**Cluster 3 (Blue)**
+Senior professionals/managers, highly experienced, with strong tenure and income, and least likely to leave.
+
+- Department: Mainly in R&D.
+- Roles: Managers, Directors.
+- Experience: High job level, income, and years at company.
+- Attrition: Very low risk.
+
+The clustering results reveal that tenure and income are key factors distinguishing employee groups. Attrition likelihood is strongly linked to both experience level and departmental placement, with job roles reflecting the employees' career stages. Overall, Cluster 3 consists of the most experienced and stable employees, while Cluster 1 is characterized by junior staff who may be more at risk of leaving the organization.
