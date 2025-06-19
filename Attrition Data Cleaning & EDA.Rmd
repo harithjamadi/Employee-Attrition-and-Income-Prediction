@@ -21,6 +21,11 @@ An HR Management Development Program is often structured to provide a thorough b
 
 ## Data preparation
 
+This section prepares the necessary library and environment for the analysis to be conducted. This includes :-
+
+- Package Installation
+- Setting Seed
+- Importing Data
 ```{r load-packages}
 # Install required packages if missing
 packages <- c("skimr", "DataExplorer", "corrplot", "ggplot2", "dplyr", "cluster", "factoextra", "caret", "randomForest", "gbm")
@@ -49,9 +54,11 @@ head(attrition)
 
 ## Data Cleaning, Understanding & Exploration
 
+This section allow further understanding of the structure, distribution, and types of variables available in the dataset, guiding preprocessing decisions and model development.
 ```{r data-wrangling}
 # Check structure and summary
-# → Understand data types, detect categorical/numeric variables, and get an overview of distributions.
+
+# Understand data types, detect categorical/numeric variables, and get an overview of distributions.
 str(attrition)
 
 summary(attrition)
@@ -62,7 +69,8 @@ skim(attrition)
 
 ```{r data-cleaning}
 # Check for missing values and duplicates
-# → Ensure data completeness and integrity before analysis.
+
+# Ensure data completeness and integrity before analysis.
 colSums(is.na(attrition))
 
 # Visualize missing data
@@ -74,7 +82,8 @@ sum(duplicated(attrition))
 
 ```{r data-encoding}
 # Convert categorical variables to factors
-# → Required for correct handling in models and visualizations.
+
+# Required for correct handling in models and visualizations.
 attrition <- attrition %>%
   mutate(
     Attrition = as.factor(Attrition),
@@ -88,31 +97,44 @@ attrition <- attrition %>%
     Over18 = as.factor(Over18)
   )
 
-str(attrition) # Re-check structure after conversion
+# Re-check structure after conversion
+str(attrition) 
 ```
+### Exploratory Data Analysis (EDA)
+
+This section explores the attrition patterns across key demographic and job-related variables. The visualization provide useful insights for further modeling.
 
 ## Summary Statistics Grouped by Attrition
+
 ```{r summary-statistics}
 # Generate summary statistics grouped by Attrition
-# → Compare means and medians of numeric features between employees who left and stayed.
+
+# Compare means and medians of numeric features between employees who left and stayed.
 attrition %>%
   group_by(Attrition) %>%
   summarise(across(where(is.numeric), list(mean = mean, median = median), .names = "{.col}_{.fn}"))
 ```
 
 ## Attrition Distribution
+
+The attrition data shown to be imbalance because of higher class of 'No' compared ti 'Yes', highlighting the needs for more careful model evaluation.
 ```{r attrition-distribution}
 # Visualize overall attrition distribution
-# → Understand class imbalance in the target variable.
+
+# Understand class imbalance in the target variable.
 ggplot(attrition, aes(x = Attrition, fill = Attrition)) +
   geom_bar() +
   theme_minimal() +
   labs(title = "Attrition Distribution", y = "Count")
 ```
+
 ## Correlation Analysis (Numerical)
+
+High correlation detected between variables such as 'TotalWorkingYears', 'JobLevel', 'YearsAtCompany', 'YearsSinceLastPromotion', and 'YearsWithCurrManager'.
 ```{r correlation-analysis}
 # Analyze correlations among numeric variables
-# → Identify multicollinearity and spot influential numeric predictors.
+
+# Identify multicollinearity and spot influential numeric predictors.
 numeric_vars <- attrition %>% select(where(is.numeric))
 
 # Correlation matrix
@@ -125,24 +147,28 @@ corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.8)
 ## Univariate & Bivariate Analysis
 ```{r variate-analysis}
 # Visualize distributions and relationships between features and Attrition
-# → Explore potential predictors and patterns.
+
+# Explore potential predictors and patterns.
 
 # Age distribution (Histogram)
-# → Understand overall age trends. Histogram is used to show frequency distribution of continuous variable (Age).
+
+# Understand overall age trends. Histogram is used to show frequency distribution of continuous variable (Age).
 ggplot(attrition, aes(x = Age)) +
   geom_histogram(fill = "steelblue", bins = 30) +
   theme_minimal() +
   labs(title = "Distribution of Age")
 
 # Monthly income by Attrition (Boxplot)
-# → Compare income distribution between employees who stayed vs left. Boxplot shows medians and outliers clearly.
+
+# Compare income distribution between employees who stayed vs left. Boxplot shows medians and outliers clearly.
 ggplot(attrition, aes(x = Attrition, y = MonthlyIncome, fill = Attrition)) +
   geom_boxplot() +
   theme_minimal() +
   labs(title = "Monthly Income by Attrition")
 
 # Job Role vs Attrition (Proportional Bar Chart)
-# → Identify which job roles have higher attrition. Proportional bar chart (position = "fill") is ideal for comparing proportions within categories.
+
+# Identify which job roles have higher attrition. Proportional bar chart (position = "fill") is ideal for comparing proportions within categories.
 ggplot(attrition, aes(x = JobRole, fill = Attrition)) +
   geom_bar(position = "fill") +
   coord_flip() +
@@ -150,56 +176,64 @@ ggplot(attrition, aes(x = JobRole, fill = Attrition)) +
   labs(title = "Attrition Rate by Job Role", y = "Proportion")
 
 # Overtime vs Attrition (Proportional Bar Chart)
-# → Analyze how working overtime affects attrition. Proportional bar chart is used to compare ratios across groups.
+
+# Analyze how working overtime affects attrition. Proportional bar chart is used to compare ratios across groups.
 ggplot(attrition, aes(x = OverTime, fill = Attrition)) +
   geom_bar(position = "fill") +
   theme_minimal() +
   labs(title = "Attrition Rate by Overtime", y = "Proportion")
 
 # Gender vs Attrition (Proportional Bar Chart)
-# → See if attrition varies by gender. Bar chart with proportion helps normalize different group sizes.
+
+# See if attrition varies by gender. Bar chart with proportion helps normalize different group sizes.
 ggplot(attrition, aes(x = Gender, fill = Attrition)) +
   geom_bar(position = "fill") +
   theme_minimal() +
   labs(title = "Attrition Rate by Gender", y = "Proportion")
 
 # Marital Status vs Attrition (Proportional Bar Chart)
-# → Assess marital status influence on attrition. Again, proportion bar chart allows fair comparison across groups.
+
+# Assess marital status influence on attrition. Again, proportion bar chart allows fair comparison across groups.
 ggplot(attrition, aes(x = MaritalStatus, fill = Attrition)) +
   geom_bar(position = "fill") +
   theme_minimal() +
   labs(title = "Attrition Rate by Marital Status", y = "Proportion")
 
 # Age by Attrition (Boxplot)
-# → Compare age ranges across attrition groups. Boxplot efficiently shows medians, spread, and outliers.
+
+# Compare age ranges across attrition groups. Boxplot efficiently shows medians, spread, and outliers.
 ggplot(attrition, aes(x = Attrition, y = Age, fill = Attrition)) +
   geom_boxplot() +
   theme_minimal() +
   labs(title = "Age Distribution by Attrition")
 
 # Years at Company by Attrition (Histogram with overlay)
-# → Examine tenure patterns among employees. Histogram shows frequency, with transparency (alpha) to allow group comparison.
+
+# Examine tenure patterns among employees. Histogram shows frequency, with transparency (alpha) to allow group comparison.
 ggplot(attrition, aes(x = YearsAtCompany, fill = Attrition)) +
   geom_histogram(position = "identity", alpha = 0.6, bins = 20) +
   theme_minimal() +
   labs(title = "Years at Company by Attrition")
 
 # Job Satisfaction vs Attrition (Stacked Bar Chart)
-# → Explore satisfaction levels related to attrition. Categorical x-axis, so bar chart is suitable. Proportions show attrition rate by rating.
+
+# Explore satisfaction levels related to attrition. Categorical x-axis, so bar chart is suitable. Proportions show attrition rate by rating.
 ggplot(attrition, aes(x = factor(JobSatisfaction), fill = Attrition)) +
   geom_bar(position = "fill") +
   theme_minimal() +
   labs(title = "Attrition by Job Satisfaction", x = "Job Satisfaction (1â€“4)", y = "Proportion")
 
 # Business Travel vs Attrition (Proportional Bar Chart)
-# → Determine if frequent travel affects attrition. Bar chart visualizes proportion of leavers in each travel group.
+
+# Determine if frequent travel affects attrition. Bar chart visualizes proportion of leavers in each travel group.
 ggplot(attrition, aes(x = BusinessTravel, fill = Attrition)) +
   geom_bar(position = "fill") +
   theme_minimal() +
   labs(title = "Attrition Rate by Business Travel", y = "Proportion")
 
 # Total Working Years vs Monthly Income by Attrition (Scatter Plot)
-# → Investigate relationship between experience and income, and how it differs for attrition status. Scatter plot best for continuous vs continuous.
+
+# Investigate relationship between experience and income, and how it differs for attrition status. Scatter plot best for continuous vs continuous.
 ggplot(attrition, aes(x = TotalWorkingYears, y = MonthlyIncome, color = Attrition)) +
   geom_point(alpha = 0.6) +
   theme_minimal() +
