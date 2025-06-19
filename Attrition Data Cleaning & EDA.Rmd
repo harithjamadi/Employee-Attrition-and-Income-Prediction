@@ -207,8 +207,14 @@ ggplot(attrition, aes(x = TotalWorkingYears, y = MonthlyIncome, color = Attritio
 
 ```
 
-## Regression Data Analysis
-```{r regression-analysis}
+## Data Preprocessing
+This section prepares dataset for both regression and clustering predictive modelling, as it improve data quality and model performance.
+The process start off by dropping non-informative columns such as EmployeeCount, EmployeeNumber, Over18, and StandardHours to minimizes the noise and redundancy.
+Then, all numerical features being scaled to ensure comparability across different scales, making it more sensitive to magnitude.
+Lastly, transforming existing categorical features into numeric format using one-hot encoding from caret package.
+The scaled data then being split into training set (80%) and testing set (20%) for model training and evaluation purpose.
+
+```{r data-preprocessing}
 # Remove non-information columns
 attrition <- subset(attrition, select = -c(EmployeeCount, EmployeeNumber, Over18, StandardHours))
 
@@ -230,22 +236,32 @@ test <- hr_scaled[-split, ]
 ```
 
 ## Predictive Modeling - Regression Analysis
+There are three regression model that being used to predict employees' monthly income based on the HR-related data. This includes :-
+
+- Linear Regression - a parametric model that estimates a linear relationship between dependent variable and one or more independent variables.
+- Random Forest - an ensemble method that builds multiple decision trees and combines their outputs to improve predictive accuracy and control overfitting
+- Gradient Boosting - an ensemble method that builds decision tree and aims to correct the errors of the previous ones.
+
 ### Linear Regression Model
+Linear regression model is trained on scaled training data to serve as a baseline. If often assumes there is linear relationship between predictors and target variable (MonthlyIncome). It being used because of the simplicity and provides as benchmark for different model performances.
 ```{r lm-model}
 model_lm <- train(MonthlyIncome ~ ., data = train, method = "lm")
 ```
 
 ### Random Forest Model
+Random Forest Regression is a robust model that capable of constructing multiple decision trees and average their predictions. We trained the model with 5-fold cross-validation to ensure that it will perform well on unseen data. Random forest also excels in capturing nonlinear and complex relationship between data.
 ```{r rf-model}
 model_rf <- train(MonthlyIncome ~ ., data = train, method = "rf", trControl = trainControl(method = "cv", number = 5))
 ```
 
 ### Gradient Boosting Model
+Gradient Boosting Model share the same robustness like Random Forest but with addition of self-correcting features. Each generated tree corrects the error made by the previous ensemble, improving it accuracy over time. Despite that, it can be more sensitive to noise and overfitting which is something that we usually want to avoid.
 ```{r gbm-model}
 model_gbm <- train(MonthlyIncome ~ ., data = train, method = "gbm", verbose = FALSE, trControl = trainControl(method = "cv", number = 5))
 ```
 
 ### Model Evaluation
+For the predictive performance, it will be evaluated through Root Mean Squared Error (RMSE), R^2 (coefficient of determination) and Mean Absolute Error (MAE) on test dataset. In this three model, Random Forest seems to outbest other model with highest R^2 and lowest RMSE and MAE, showing the superior ability to accurately predict the MonthlyIncome. Followed closely by Gradient Boosting, while Linear Regression performs relatively worse. 
 ```{r model-evaluation}
 pred_lm <- predict(model_lm, newdata = test)
 pred_rf <- predict(model_rf, newdata = test)
@@ -257,6 +273,7 @@ postResample(pred_gbm, obs = test$MonthlyIncome)
 ```
 
 ### Prediction Visualization
+A Scatter Plot to compares the actual vs predicted monthly incomes for the Random Forest model. The dashed red line indicates the perfect case where predicted values match the actual incomes. The scatter plot helps to highlight how well the model generalizes, and identifies pattern in dataset.
 ```{r model-prediction}
 ggplot(data.frame(Actual = test$MonthlyIncome, Predicted = pred_rf), aes(x = Actual, y = Predicted)) +
   geom_point(alpha = 0.6, color = "steelblue") +
@@ -266,11 +283,13 @@ ggplot(data.frame(Actual = test$MonthlyIncome, Predicted = pred_rf), aes(x = Act
 ```
 
 ### Feature Importance
+Feature Importance is extracted to identify which variables influence prediction of monthly income. JobLevel appears as the most influential predictor, showing its strong relationship with salary bands. Other remarkable features include TotalWorkingYears and JobRole, which also contribute significantly to predict the monthly income.
 ```{r feature-ranking}
 varImp(model_rf)
 ```
 
 ### Pay Equity Analysis
+This analysis investigates model performance to under- or over-predicts income for certain employee. By calculating the difference between predicted and actual incomes, it is possible to identify top underpaid or overpaid individuals based on the model output. These insights could be utilized by audit to compensate fairness and support HR decision-making. However, there might be prediction error by product of imbalance and model bias, especially for outlier values.
 ```{r pay-equity-analysis}
 test_results <- data.frame(Actual = test$MonthlyIncome, Predicted = pred_rf)
 test_results$Difference <- test_results$Predicted - test_results$Actual
